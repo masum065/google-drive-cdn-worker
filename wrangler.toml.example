@@ -1,0 +1,38 @@
+name = "your-cdn-worker-name"
+main = "src/worker-api.js"
+compatibility_date = "2024-11-06"
+compatibility_flags = ["nodejs_compat"]
+
+# Rules for bundling additional files
+[[rules]]
+type = "Data"
+globs = ["src/service-accounts.json"]
+fallthrough = true
+
+[[rules]]
+type = "Text"
+globs = [
+    "src/index.html"
+]
+fallthrough = true
+
+# Environment variables
+[vars]
+DRIVE_UPLOAD_ROOT = "YOUR_GOOGLE_DRIVE_FOLDER_ID"
+API_TOKENS = "YOUR_SECRET_API_TOKEN_HERE"
+CDN_BASE_URL = "https://your-worker.workers.dev"
+
+# KV namespace for storing upload sessions and statistics
+[[kv_namespaces]]
+binding = "UPLOAD_SESSIONS"
+id = "YOUR_KV_NAMESPACE_ID_FOR_SESSIONS"
+
+# KV namespace for statistics
+[[kv_namespaces]]
+binding = "STATS"
+id = "YOUR_KV_NAMESPACE_ID_FOR_STATS"
+
+[[rules]]
+type = "Text"
+globs = ["src/assets/*.css"]
+fallthrough = true

@@ -120,7 +120,6 @@ wrangler.toml.local
 DOMAIN_SETUP.md
 OAUTH_FIX.md
 credentials.json
-setup-helper.mjs
 wrangler.toml
 QUICK_START.md
 
