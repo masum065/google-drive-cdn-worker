@@ -122,7 +122,15 @@ export default {
 				}
 			}
 
-			return errorResponse('not_found', 'Endpoint not found', 404);
+		if (segments[0] === 'api' && segments[1] === 'folders' && request.method === 'POST') {
+			return await handleFolderCreate(request, drive, config);
+		}
+
+		if (segments[0] === 'api' && segments[1] === 'folders' && segments[2] && request.method === 'DELETE') {
+			return await handleFolderDelete(segments[2], drive);
+		}
+
+		return errorResponse('not_found', 'Endpoint not found', 404);
 		} catch (err) {
 			console.error(err);
 			return errorResponse('internal_error', err.message, 500);
@@ -302,6 +310,65 @@ async function handleOpenAPI(request, config) {
 						204: { description: 'File deleted successfully' },
 						401: { description: 'Unauthorized' },
 						404: { description: 'File not found' },
+					},
+				},
+			},
+			'/api/folders': {
+				post: {
+					tags: ['Files'],
+					summary: 'Create a folder',
+					description: 'Create a new folder in Google Drive',
+					security: [{ bearerAuth: [] }, { apiKey: [] }],
+					requestBody: {
+						required: true,
+						content: {
+							'application/json': {
+								schema: {
+									type: 'object',
+									required: ['name'],
+									properties: {
+										name: { type: 'string', description: 'Folder name' },
+										parents: { type: 'array', items: { type: 'string' }, description: 'Parent folder IDs' },
+										description: { type: 'string' },
+									},
+								},
+							},
+						},
+					},
+					responses: {
+						201: {
+							description: 'Folder created successfully',
+							content: {
+								'application/json': {
+									schema: {
+										type: 'object',
+										properties: {
+											id: { type: 'string' },
+											name: { type: 'string' },
+											mimeType: { type: 'string' },
+											parents: { type: 'array', items: { type: 'string' } },
+											createdTime: { type: 'string' },
+										},
+									},
+								},
+							},
+						},
+						400: { description: 'Bad request' },
+						401: { description: 'Unauthorized' },
+					},
+				},
+			},
+			'/api/folders/{id}': {
+				delete: {
+					tags: ['Files'],
+					summary: 'Delete a folder',
+					description: 'Delete a folder from Google Drive',
+					security: [{ bearerAuth: [] }, { apiKey: [] }],
+					parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' }, description: 'Google Drive folder ID' }],
+					responses: {
+						200: { description: 'Folder deleted successfully' },
+						401: { description: 'Unauthorized' },
+						404: { description: 'Folder not found' },
 					},
 				},
 			},
@@ -529,6 +596,24 @@ async function handleMetadata(id, drive, config, origin) {
 
 async function handleDelete(id, drive) {
 	await drive.deleteFile(id);
+	return successResponse({ id, deleted: true });
+}
+
+async function handleFolderCreate(request, drive, config) {
+	const payload = await request.json();
+	if (!payload?.name) {
+		return errorResponse('invalid_request', '`name` is required', 400);
+	}
+	const folder = await drive.createFolder({
+		name: payload.name,
+		parents: payload.parents,
+		description: payload.description,
+	});
+	return successResponse(folder, 201);
+}
+
+async function handleFolderDelete(id, drive) {
+	await drive.deleteFolder(id);
 	return successResponse({ id, deleted: true });
 }
 

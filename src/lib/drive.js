@@ -251,6 +251,35 @@ export class DriveClient {
     });
   }
 
+  async createFolder({ name, parents, description }) {
+    if (!name) {
+      throw new Error('Folder name is required');
+    }
+    const metadata = {
+      name,
+      mimeType: 'application/vnd.google-apps.folder',
+      parents: parents && parents.length ? parents : this.parents,
+    };
+    if (description) {
+      metadata.description = description;
+    }
+    return this.fetchJson(
+      'https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id,name,mimeType,createdTime,modifiedTime,parents',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(metadata),
+      },
+    );
+  }
+
+  async deleteFolder(id) {
+    // Folders are deleted the same way as files in Google Drive API
+    return this.deleteFile(id);
+  }
+
   async streamFile(id, rangeHeader, method = 'GET') {
     const headers = {
       Authorization: `Bearer ${await this.getAccessToken()}`,
