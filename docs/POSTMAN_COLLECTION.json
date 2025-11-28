@@ -1,0 +1,765 @@
+{
+	"info": {
+		"_postman_id": "google-drive-cdn-worker-api",
+		"name": "Google Drive CDN Worker API",
+		"description": "# 🚀 Google Drive CDN Worker API\n\nTransform your Google Drive into a lightning-fast global CDN using Cloudflare Workers.\n\n## 🔐 Authentication\n\nAll API endpoints (except public file access and stats) require authentication using one of these methods:\n\n1. **Bearer Token**: `Authorization: Bearer YOUR_API_TOKEN`\n2. **API Key Header**: `x-api-key: YOUR_API_TOKEN`\n\n## 📝 Setup Instructions\n\n1. Set the `{{baseUrl}}` variable to your worker URL (e.g., `https://your-worker.workers.dev`)\n2. Set the `{{apiToken}}` variable to your API token\n3. Start making requests!\n\n## 📚 Available Endpoints\n\n- **POST /api/files** - Upload files (multipart, max 20MB)\n- **POST /api/uploads** - Initialize resumable upload for large files\n- **GET /api/files/{id}** - Get file metadata\n- **DELETE /api/files/{id}** - Delete a file\n- **GET /files/{id}** - Public file access (no auth required)\n- **GET /api/stats** - Get service statistics\n- **GET /api/dashboard/summary** - Get dashboard summary\n- **GET /api/dashboard/files** - List files with pagination\n\n## 🎯 Features\n\n- ✅ Direct multipart upload (up to 20MB)\n- ✅ Resumable uploads for large files\n- ✅ File metadata management\n- ✅ Public CDN URLs\n- ✅ Video streaming with Range support\n- ✅ Statistics tracking\n- ✅ File filtering and pagination",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"version": "3.0.0"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{apiToken}}",
+				"type": "string"
+			}
+		]
+	},
+	"item": [
+		{
+			"name": "Files",
+			"item": [
+				{
+					"name": "Upload File (Multipart)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Save file ID for later use",
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    if (response.data && response.data.id) {",
+									"        pm.environment.set('fileId', response.data.id);",
+									"        pm.environment.set('cdnUrl', response.data.rawUrl);",
+									"        console.log('File uploaded successfully!');",
+									"        console.log('File ID:', response.data.id);",
+									"        console.log('CDN URL:', response.data.rawUrl);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": [],
+									"description": "Select the file to upload (max 20MB)"
+								},
+								{
+									"key": "metadata",
+									"value": "{\n  \"name\": \"my-image.jpg\",\n  \"description\": \"Uploaded via Postman\",\n  \"parents\": [\"root\"]\n}",
+									"type": "text",
+									"description": "Optional JSON metadata for the file"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/files",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"files"
+							]
+						},
+						"description": "Upload a file directly using multipart/form-data.\n\n**Maximum file size: 20MB**\n\nFor larger files, use the `/api/uploads` endpoint for resumable uploads.\n\n### Request Body\n\n- `file` (required): The file to upload\n- `metadata` (optional): JSON string with file metadata\n  - `name`: Custom filename\n  - `description`: File description\n  - `parents`: Array of parent folder IDs (default: [\"root\"])\n\n### Response\n\n```json\n{\n  \"status\": \"success\",\n  \"data\": {\n    \"id\": \"1abc123xyz\",\n    \"name\": \"my-image.jpg\",\n    \"mimeType\": \"image/jpeg\",\n    \"size\": \"524288\",\n    \"rawUrl\": \"https://your-worker.workers.dev/files/1abc123xyz\"\n  }\n}\n```"
+					},
+					"response": [
+						{
+							"name": "Success - File Uploaded",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "file",
+											"type": "file",
+											"src": "example.jpg"
+										},
+										{
+											"key": "metadata",
+											"value": "{\"name\":\"example.jpg\",\"description\":\"Test upload\"}",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/files",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"files"
+									]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"id\": \"1abc123xyz\",\n        \"name\": \"example.jpg\",\n        \"mimeType\": \"image/jpeg\",\n        \"size\": \"524288\",\n        \"rawUrl\": \"https://your-worker.workers.dev/files/1abc123xyz\"\n    }\n}"
+						},
+						{
+							"name": "Error - File Too Large",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "file",
+											"type": "file",
+											"src": "large-file.mp4"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/files",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"files"
+									]
+								}
+							},
+							"status": "Payload Too Large",
+							"code": 413,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"status\": \"error\",\n    \"error\": {\n        \"code\": \"payload_too_large\",\n        \"message\": \"file exceeds 20971520 bytes, use /api/uploads\"\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Initialize Resumable Upload",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Save upload session details",
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    if (response.data && response.data.uploadSession) {",
+									"        pm.environment.set('uploadUrl', response.data.uploadSession.uploadUrl);",
+									"        pm.environment.set('uploadId', response.data.uploadSession.uploadId);",
+									"        pm.environment.set('fileId', response.data.uploadSession.fileId);",
+									"        console.log('Upload session created!');",
+									"        console.log('Upload URL:', response.data.uploadSession.uploadUrl);",
+									"        console.log('Upload ID:', response.data.uploadSession.uploadId);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"large-video.mp4\",\n  \"mimeType\": \"video/mp4\",\n  \"size\": 104857600,\n  \"description\": \"Large video file\",\n  \"parents\": [\"root\"]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/uploads",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"uploads"
+							]
+						},
+						"description": "Create a resumable upload session for large files (> 20MB).\n\nThis endpoint returns an `uploadUrl` that you can use to stream file chunks directly to Google Drive.\n\n### Request Body\n\n- `name` (required): File name\n- `mimeType` (optional): MIME type (e.g., \"video/mp4\")\n- `size` (optional): File size in bytes\n- `description` (optional): File description\n- `parents` (optional): Array of parent folder IDs\n\n### Response\n\n```json\n{\n  \"status\": \"success\",\n  \"data\": {\n    \"uploadSession\": {\n      \"uploadUrl\": \"https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=xyz\",\n      \"uploadId\": \"xyz\",\n      \"fileId\": \"1abc123\"\n    }\n  }\n}\n```\n\n### Next Steps\n\nUse the returned `uploadUrl` to upload your file chunks:\n\n```bash\ncurl -X PUT \"{{uploadUrl}}\" \\\n  -H \"Content-Type: video/mp4\" \\\n  -H \"Content-Range: bytes 0-524287/104857600\" \\\n  --data-binary @chunk1.bin\n```"
+					},
+					"response": [
+						{
+							"name": "Success - Session Created",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"large-video.mp4\",\n  \"mimeType\": \"video/mp4\",\n  \"size\": 104857600\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/uploads",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"uploads"
+									]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"uploadSession\": {\n            \"uploadUrl\": \"https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=xyz123\",\n            \"uploadId\": \"xyz123\",\n            \"fileId\": \"1abc123xyz\"\n        }\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Get File Metadata",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Display file information",
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.data) {",
+									"        console.log('File Name:', response.data.name);",
+									"        console.log('MIME Type:', response.data.mimeType);",
+									"        console.log('Size:', response.data.size);",
+									"        console.log('CDN URL:', response.data.rawUrl);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/files/{{fileId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"files",
+								"{{fileId}}"
+							]
+						},
+						"description": "Retrieve metadata for a specific file.\n\n### Path Parameters\n\n- `id`: Google Drive file ID\n\n### Response\n\n```json\n{\n  \"status\": \"success\",\n  \"data\": {\n    \"id\": \"1abc123xyz\",\n    \"name\": \"my-image.jpg\",\n    \"size\": \"524288\",\n    \"mimeType\": \"image/jpeg\",\n    \"rawUrl\": \"https://your-worker.workers.dev/files/1abc123xyz\"\n  }\n}\n```"
+					},
+					"response": [
+						{
+							"name": "Success - File Metadata",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/files/1abc123xyz",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"files",
+										"1abc123xyz"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"id\": \"1abc123xyz\",\n        \"name\": \"my-image.jpg\",\n        \"size\": \"524288\",\n        \"mimeType\": \"image/jpeg\",\n        \"rawUrl\": \"https://your-worker.workers.dev/files/1abc123xyz\"\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "Delete File",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Confirm deletion",
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    console.log('File deleted successfully!');",
+									"    console.log('File ID:', response.data.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/files/{{fileId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"files",
+								"{{fileId}}"
+							]
+						},
+						"description": "Delete a file from Google Drive.\n\n### Path Parameters\n\n- `id`: Google Drive file ID\n\n### Response\n\n```json\n{\n  \"status\": \"success\",\n  \"data\": {\n    \"id\": \"1abc123xyz\",\n    \"deleted\": true\n  }\n}\n```"
+					},
+					"response": [
+						{
+							"name": "Success - File Deleted",
+							"originalRequest": {
+								"method": "DELETE",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/files/1abc123xyz",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"files",
+										"1abc123xyz"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"id\": \"1abc123xyz\",\n        \"deleted\": true\n    }\n}"
+						}
+					]
+				}
+			],
+			"description": "File upload and management operations. All endpoints require authentication."
+		},
+		{
+			"name": "Public Files",
+			"item": [
+				{
+					"name": "Access File (Public)",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/files/{{fileId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"files",
+								"{{fileId}}"
+							]
+						},
+						"description": "Public endpoint to access files. **No authentication required.**\n\nSupports Range requests for video streaming and partial content delivery.\n\n### Path Parameters\n\n- `id`: Google Drive file ID\n\n### Headers (Optional)\n\n- `Range`: Byte range for partial content (e.g., `bytes=0-1023`)\n\n### Response\n\nReturns the file content with appropriate headers:\n\n- `Content-Type`: File's MIME type\n- `Content-Length`: File size\n- `Accept-Ranges`: bytes\n- `Cache-Control`: Caching directives\n\n### Video Streaming Example\n\n```bash\ncurl -H \"Range: bytes=0-1048575\" \\\n  https://your-worker.workers.dev/files/1abc123xyz\n```"
+					},
+					"response": [
+						{
+							"name": "Success - Full Content",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/files/1abc123xyz",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"files",
+										"1abc123xyz"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "plain",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "image/jpeg"
+								},
+								{
+									"key": "Content-Length",
+									"value": "524288"
+								},
+								{
+									"key": "Accept-Ranges",
+									"value": "bytes"
+								}
+							],
+							"body": "[Binary file content]"
+						},
+						{
+							"name": "Success - Partial Content (Range)",
+							"originalRequest": {
+								"method": "GET",
+								"header": [
+									{
+										"key": "Range",
+										"value": "bytes=0-1023"
+									}
+								],
+								"url": {
+									"raw": "{{baseUrl}}/files/1abc123xyz",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"files",
+										"1abc123xyz"
+									]
+								}
+							},
+							"status": "Partial Content",
+							"code": 206,
+							"_postman_previewlanguage": "plain",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "video/mp4"
+								},
+								{
+									"key": "Content-Range",
+									"value": "bytes 0-1023/104857600"
+								},
+								{
+									"key": "Content-Length",
+									"value": "1024"
+								}
+							],
+							"body": "[Partial binary content]"
+						}
+					]
+				},
+				{
+					"name": "Get File Headers (HEAD)",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "HEAD",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/files/{{fileId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"files",
+								"{{fileId}}"
+							]
+						},
+						"description": "Get file metadata via HEAD request without downloading the content.\n\n**No authentication required.**\n\n### Path Parameters\n\n- `id`: Google Drive file ID\n\n### Response Headers\n\n- `Content-Type`: File's MIME type\n- `Content-Length`: File size in bytes\n- `Accept-Ranges`: bytes\n- `Last-Modified`: Last modification date"
+					},
+					"response": []
+				}
+			],
+			"description": "Public file delivery endpoints. No authentication required."
+		},
+		{
+			"name": "Dashboard",
+			"item": [
+				{
+					"name": "Get Dashboard Summary",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/dashboard/summary",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"dashboard",
+								"summary"
+							]
+						},
+						"description": "Get dashboard summary including statistics, storage quota, and file counts.\n\n**No authentication required.**\n\n### Response\n\n```json\n{\n  \"status\": \"success\",\n  \"data\": {\n    \"stats\": {\n      \"totalUploads\": 150,\n      \"totalFileRequests\": 5420,\n      \"totalDeletes\": 12\n    },\n    \"storage\": {\n      \"totalBytes\": 16106127360,\n      \"usedBytes\": 8053063680,\n      \"trashBytes\": 0,\n      \"totalDisplay\": \"15 GB\",\n      \"usedDisplay\": \"7.5 GB\",\n      \"trashDisplay\": \"0 B\",\n      \"percentUsed\": 50\n    },\n    \"files\": {\n      \"totalFiles\": 150,\n      \"folderCount\": 5,\n      \"cached\": true\n    },\n    \"meta\": {\n      \"cdnBaseUrl\": \"https://your-worker.workers.dev\",\n      \"repoUrl\": \"https://github.com/masum065/google-drive-cdn-worker\"\n    }\n  }\n}\n```"
+					},
+					"response": [
+						{
+							"name": "Success - Dashboard Summary",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/dashboard/summary",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"dashboard",
+										"summary"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"stats\": {\n            \"totalUploads\": 150,\n            \"totalFileRequests\": 5420,\n            \"totalDeletes\": 12\n        },\n        \"storage\": {\n            \"totalBytes\": 16106127360,\n            \"usedBytes\": 8053063680,\n            \"trashBytes\": 0,\n            \"totalDisplay\": \"15 GB\",\n            \"usedDisplay\": \"7.5 GB\",\n            \"trashDisplay\": \"0 B\",\n            \"percentUsed\": 50\n        },\n        \"files\": {\n            \"totalFiles\": 150,\n            \"folderCount\": 5,\n            \"cached\": true\n        },\n        \"meta\": {\n            \"cdnBaseUrl\": \"https://your-worker.workers.dev\",\n            \"repoUrl\": \"https://github.com/masum065/google-drive-cdn-worker\"\n        }\n    }\n}"
+						}
+					]
+				},
+				{
+					"name": "List Files",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/dashboard/files?pageSize=24&type=all&search=",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"dashboard",
+								"files"
+							],
+							"query": [
+								{
+									"key": "pageSize",
+									"value": "24",
+									"description": "Number of files per page (default: 24)"
+								},
+								{
+									"key": "pageToken",
+									"value": "",
+									"description": "Token for next page (from previous response)",
+									"disabled": true
+								},
+								{
+									"key": "type",
+									"value": "all",
+									"description": "Filter by type: all, images, video, audio, documents, code, data"
+								},
+								{
+									"key": "search",
+									"value": "",
+									"description": "Search query"
+								}
+							]
+						},
+						"description": "List files with pagination, filtering, and search.\n\n**No authentication required.**\n\n### Query Parameters\n\n- `pageSize` (optional): Number of files per page (default: 24)\n- `pageToken` (optional): Token for next page\n- `type` (optional): Filter by type\n  - `all` (default)\n  - `images`\n  - `video`\n  - `audio`\n  - `documents`\n  - `code`\n  - `data`\n- `search` (optional): Search query\n\n### Response\n\n```json\n{\n  \"status\": \"success\",\n  \"data\": {\n    \"files\": [\n      {\n        \"id\": \"1abc123xyz\",\n        \"name\": \"example.jpg\",\n        \"description\": \"\",\n        \"mimeType\": \"image/jpeg\",\n        \"type\": \"images\",\n        \"sizeBytes\": 524288,\n        \"sizeDisplay\": \"512 KB\",\n        \"modifiedTime\": \"2024-01-15T10:30:00.000Z\",\n        \"modifiedDisplay\": \"Jan 15, 2024\",\n        \"createdTime\": \"2024-01-15T10:30:00.000Z\",\n        \"createdDisplay\": \"Jan 15, 2024\",\n        \"thumbnailUrl\": \"https://...\",\n        \"iconUrl\": \"https://...\",\n        \"driveUrl\": \"https://drive.google.com/file/d/1abc123xyz/view\",\n        \"cdnUrl\": \"https://your-worker.workers.dev/files/1abc123xyz\",\n        \"downloadUrl\": \"https://your-worker.workers.dev/files/1abc123xyz\",\n        \"md5Checksum\": \"abc123...\"\n      }\n    ],\n    \"nextPageToken\": \"token123\",\n    \"totalFiles\": 150,\n    \"folderCount\": 5,\n    \"pageSize\": 24,\n    \"query\": {\n      \"search\": \"\",\n      \"type\": \"all\"\n    }\n  }\n}\n```"
+					},
+					"response": [
+						{
+							"name": "Success - File List",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/dashboard/files?pageSize=24&type=images",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"dashboard",
+										"files"
+									],
+									"query": [
+										{
+											"key": "pageSize",
+											"value": "24"
+										},
+										{
+											"key": "type",
+											"value": "images"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"files\": [\n            {\n                \"id\": \"1abc123xyz\",\n                \"name\": \"example.jpg\",\n                \"description\": \"\",\n                \"mimeType\": \"image/jpeg\",\n                \"type\": \"images\",\n                \"sizeBytes\": 524288,\n                \"sizeDisplay\": \"512 KB\",\n                \"modifiedTime\": \"2024-01-15T10:30:00.000Z\",\n                \"modifiedDisplay\": \"Jan 15, 2024\",\n                \"createdTime\": \"2024-01-15T10:30:00.000Z\",\n                \"createdDisplay\": \"Jan 15, 2024\",\n                \"thumbnailUrl\": \"https://lh3.googleusercontent.com/...\",\n                \"iconUrl\": \"https://drive-thirdparty.googleusercontent.com/...\",\n                \"driveUrl\": \"https://drive.google.com/file/d/1abc123xyz/view\",\n                \"cdnUrl\": \"https://your-worker.workers.dev/files/1abc123xyz\",\n                \"downloadUrl\": \"https://your-worker.workers.dev/files/1abc123xyz\",\n                \"md5Checksum\": \"abc123def456\"\n            }\n        ],\n        \"nextPageToken\": null,\n        \"totalFiles\": 1,\n        \"folderCount\": 0,\n        \"pageSize\": 24,\n        \"query\": {\n            \"search\": \"\",\n            \"type\": \"images\"\n        }\n    }\n}"
+						}
+					]
+				}
+			],
+			"description": "Dashboard-related endpoints for statistics and file browsing."
+		},
+		{
+			"name": "Statistics",
+			"item": [
+				{
+					"name": "Get Service Statistics",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/stats",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"stats"
+							]
+						},
+						"description": "Get usage statistics for the CDN service.\n\n**No authentication required.**\n\n### Response\n\n```json\n{\n  \"status\": \"success\",\n  \"data\": {\n    \"totalUploads\": 150,\n    \"totalFileRequests\": 5420,\n    \"totalDeletes\": 12\n  }\n}\n```"
+					},
+					"response": [
+						{
+							"name": "Success - Statistics",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/stats",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"stats"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n    \"status\": \"success\",\n    \"data\": {\n        \"totalUploads\": 150,\n        \"totalFileRequests\": 5420,\n        \"totalDeletes\": 12\n    }\n}"
+						}
+					]
+				}
+			],
+			"description": "Service statistics and monitoring endpoints."
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Pre-request script runs before each request",
+					"// You can add custom logic here if needed"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Test script runs after each request",
+					"// Log response time",
+					"console.log('Response time:', pm.response.responseTime, 'ms');"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "https://your-worker.workers.dev",
+			"type": "string"
+		},
+		{
+			"key": "apiToken",
+			"value": "your-api-token-here",
+			"type": "string"
+		},
+		{
+			"key": "fileId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "cdnUrl",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "uploadUrl",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "uploadId",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
