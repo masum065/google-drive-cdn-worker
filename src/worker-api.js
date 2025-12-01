@@ -1,4 +1,5 @@
 import { DriveClient } from './lib/drive.js';
+import { shouldOptimizeImage, optimizeImage } from './lib/image-optimizer.js';
 import dashboardHtml from './index.html';
 import dashboardCss from './assets/main.css';
 const textDecoder = typeof TextDecoder !== 'undefined' ? new TextDecoder() : null;
@@ -560,7 +561,7 @@ function extractToken(request) {
 
 async function handleMultipartUpload(request, drive, config, env, origin) {
 	const formData = await request.formData();
-	const file = formData.get('file');
+	let file = formData.get('file');
 	if (!(file instanceof File)) {
 		return errorResponse('invalid_request', '`file` form field missing', 400);
 	}
@@ -576,8 +577,47 @@ async function handleMultipartUpload(request, drive, config, env, origin) {
 			return errorResponse('invalid_request', 'metadata must be valid JSON', 400);
 		}
 	}
+
+	// Try to optimize image if applicable
+	let optimizationStats = null;
+	if (shouldOptimizeImage(file)) {
+		try {
+			const fileBuffer = await file.arrayBuffer();
+			const fileName = metadata.name || file.name;
+			const optimized = await optimizeImage(fileBuffer, fileName);
+
+			if (optimized.success) {
+				// Create new File object with optimized buffer
+				file = new File([optimized.buffer], optimized.fileName, {
+					type: optimized.mimeType,
+				});
+
+				// Update metadata with new filename
+				metadata.name = optimized.fileName;
+				optimizationStats = optimized.stats;
+			}
+		} catch (error) {
+			// Log error but continue with original file
+			console.error('[Image Optimizer] Unexpected error:', error);
+		}
+	}
+
 	const uploaded = await drive.uploadMultipart({ file, metadata });
-	return successResponse({ ...uploaded, rawUrl: buildFilesUrl(uploaded.id, config, origin) }, 201);
+	
+	// Include optimization stats in response if available
+	const response = {
+		...uploaded,
+		rawUrl: buildFilesUrl(uploaded.id, config, origin),
+	};
+	
+	if (optimizationStats) {
+		response.optimization = {
+			applied: true,
+			...optimizationStats,
+		};
+	}
+	
+	return successResponse(response, 201);
 }
 
 async function handleResumableInit(request, drive) {
