@@ -184,6 +184,7 @@
             from { transform: translateX(100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
+        /* CSS will be injected here by worker */
     </style>
 </head>
 <body class="bg-[#0a0a0f] text-gray-100 font-sans antialiased">
@@ -354,6 +355,19 @@
                 </div>
             </div>
 
+            <!-- Drive Status Section -->
+            <div class="mb-10 mt-12">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-semibold text-white flex items-center">
+                        <i class="ri-database-line mr-2 text-purple-400"></i>
+                        Drive Status
+                    </h2>
+                </div>
+                <div id="driveGrid" class="grid grid-cols-1 gap-6">
+                    <!-- Dynamic Drive Card will be rendered here -->
+                </div>
+            </div>
+
             <!-- Files Section -->
             <section class="space-y-6 mt-12">
                 <div class="flex items-center justify-between">
@@ -470,6 +484,8 @@
     </footer>
 
     <!-- Scripts -->
-    <script src="__DASHBOARD_JS_URL__"></script>
+    <script>
+        /* JS will be injected here by worker */
+    </script>
 </body>
 </html>

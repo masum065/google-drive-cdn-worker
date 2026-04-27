@@ -1,18 +1,18 @@
 import { DriveClient } from './lib/drive.js';
-import { shouldOptimizeImage, optimizeImage } from './lib/image-optimizer.js';
 import dashboardHtml from './index.html';
-import dashboardCss from './assets/main.css';
+import dashboardCss from './assets/main.css.txt';
+import dashboardJs from './assets/main.js.txt';
 const textDecoder = typeof TextDecoder !== 'undefined' ? new TextDecoder() : null;
 
 const corsHeaders = {
 	'Access-Control-Allow-Origin': '*',
-	'Access-Control-Allow-Headers': 'authorization,content-type,x-api-key',
-	'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+	'Access-Control-Allow-Headers': 'authorization,content-type,content-range,x-api-key',
+	'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
 };
 
 const MAX_DIRECT_UPLOAD_BYTES = 20 * 1024 * 1024; // 20MB limit for direct multipart uploads
 const DASHBOARD_REPO_URL = 'https://github.com/masum065/google-drive-cdn-worker';
-const FILE_COUNT_CACHE_KEY = 'dashboard:file_counts';
+const FILE_COUNT_CACHE_KEY = 'dashboard:file_counts:v3';
 const FILE_COUNT_CACHE_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_FILE_PAGE_SIZE = 24;
 const DASHBOARD_VERSION = typeof process !== 'undefined' && process.env?.npm_package_version ? process.env.npm_package_version : '1.0.0';
@@ -107,12 +107,18 @@ export default {
 			}
 
 			if (segments[0] === 'api' && segments[1] === 'uploads' && request.method === 'POST') {
-				const result = await handleResumableInit(request, drive);
-				ctx.waitUntil(trackUpload(env, 'resumable'));
-				return result;
-			}
+			const result = await handleResumableInit(request, drive, env);
+			ctx.waitUntil(trackUpload(env, 'resumable'));
+			return result;
+		}
 
-			if (segments[0] === 'api' && segments[1] === 'files' && segments[2]) {
+		// Chunk proxy endpoint - PUT /api/uploads/:uploadId/chunk
+		if (segments[0] === 'api' && segments[1] === 'uploads' && segments[2] && segments[3] === 'chunk' && request.method === 'PUT') {
+			const uploadId = segments[2];
+			return await handleChunkUpload(request, uploadId, env, drive);
+		}
+
+		if (segments[0] === 'api' && segments[1] === 'files' && segments[2]) {
 				if (request.method === 'GET') {
 					return await handleMetadata(segments[2], drive, config, url.origin);
 				}
@@ -454,8 +460,8 @@ async function handleDashboardSummary(request, env, config, drive) {
 	]);
 	return successResponse({
 		stats,
-		storage: formatStorageQuota(storageQuota),
-		files: counts || { totalFiles: 0, folderCount: 0, cached: false },
+		storage: formatStorageQuota(storageQuota, counts, config),
+		files: counts || { totalFiles: 0, totalSize: 0, folderCount: 0, cached: false },
 		meta: {
 			cdnBaseUrl: config.CDN_BASE_URL || origin,
 			repoUrl: DASHBOARD_REPO_URL,
@@ -561,7 +567,7 @@ function extractToken(request) {
 
 async function handleMultipartUpload(request, drive, config, env, origin) {
 	const formData = await request.formData();
-	let file = formData.get('file');
+	const file = formData.get('file');
 	if (!(file instanceof File)) {
 		return errorResponse('invalid_request', '`file` form field missing', 400);
 	}
@@ -577,56 +583,111 @@ async function handleMultipartUpload(request, drive, config, env, origin) {
 			return errorResponse('invalid_request', 'metadata must be valid JSON', 400);
 		}
 	}
-
-	// Try to optimize image if applicable
-	let optimizationStats = null;
-	if (shouldOptimizeImage(file)) {
-		try {
-			const fileBuffer = await file.arrayBuffer();
-			const fileName = metadata.name || file.name;
-			const optimized = await optimizeImage(fileBuffer, fileName);
-
-			if (optimized.success) {
-				// Create new File object with optimized buffer
-				file = new File([optimized.buffer], optimized.fileName, {
-					type: optimized.mimeType,
-				});
-
-				// Update metadata with new filename
-				metadata.name = optimized.fileName;
-				optimizationStats = optimized.stats;
-			}
-		} catch (error) {
-			// Log error but continue with original file
-			console.error('[Image Optimizer] Unexpected error:', error);
-		}
-	}
-
 	const uploaded = await drive.uploadMultipart({ file, metadata });
-	
-	// Include optimization stats in response if available
-	const response = {
-		...uploaded,
-		rawUrl: buildFilesUrl(uploaded.id, config, origin),
-	};
-	
-	if (optimizationStats) {
-		response.optimization = {
-			applied: true,
-			...optimizationStats,
-		};
-	}
-	
-	return successResponse(response, 201);
+	return successResponse({ ...uploaded, rawUrl: buildFilesUrl(uploaded.id, config, origin) }, 201);
 }
 
-async function handleResumableInit(request, drive) {
+async function handleResumableInit(request, drive, env) {
 	const payload = await request.json();
 	if (!payload?.name) {
 		return errorResponse('invalid_request', '`name` is required', 400);
 	}
 	const session = await drive.createResumableSession(payload);
-	return successResponse({ uploadSession: session }, 201);
+	
+	// Generate a unique uploadId and store the uploadUrl in KV for chunk proxy
+	const uploadId = generateUploadId();
+	
+	if (env?.UPLOAD_SESSIONS && session.uploadUrl) {
+		try {
+			// Store uploadUrl in KV with 24 hour expiration
+			await env.UPLOAD_SESSIONS.put(uploadId, session.uploadUrl, { expirationTtl: 86400 });
+		} catch (err) {
+			console.error('Failed to store upload session in KV:', err);
+		}
+	}
+	
+	return successResponse({ 
+		uploadSession: {
+			...session,
+			uploadId,
+		}
+	}, 201);
+}
+
+// Generate a unique upload ID
+function generateUploadId() {
+	const timestamp = Date.now().toString(36);
+	const random = Math.random().toString(36).substring(2, 15);
+	return `${timestamp}-${random}`;
+}
+
+// Handle chunk upload by proxying to Google Drive
+async function handleChunkUpload(request, uploadId, env, drive) {
+	if (!env?.UPLOAD_SESSIONS) {
+		return errorResponse('server_error', 'Upload sessions not configured', 500);
+	}
+	
+	// Get uploadUrl from KV
+	const uploadUrl = await env.UPLOAD_SESSIONS.get(uploadId);
+	if (!uploadUrl) {
+		return errorResponse('not_found', 'Upload session not found or expired', 404);
+	}
+	
+	// Get the chunk data
+	const chunk = await request.arrayBuffer();
+	const contentRange = request.headers.get('Content-Range');
+	const contentType = request.headers.get('Content-Type') || 'application/octet-stream';
+	
+	if (!contentRange) {
+		return errorResponse('invalid_request', 'Content-Range header required', 400);
+	}
+	
+	// Forward chunk to Google Drive
+	const response = await fetch(uploadUrl, {
+		method: 'PUT',
+		headers: {
+			'Content-Type': contentType,
+			'Content-Range': contentRange,
+		},
+		body: chunk,
+	});
+	
+	// If upload is complete (200 OK), parse file info and clean up KV
+	if (response.status === 200) {
+		try {
+			// Remove session from KV
+			await env.UPLOAD_SESSIONS.delete(uploadId);
+			
+			// Return file info
+			const fileInfo = await response.json();
+			return successResponse({
+				id: fileInfo.id,
+				name: fileInfo.name,
+				mimeType: fileInfo.mimeType,
+				size: fileInfo.size,
+				complete: true,
+			});
+		} catch (err) {
+			console.error('Failed to parse complete upload response:', err);
+		}
+	}
+	
+	// Return Google's response for 308 (Resume Incomplete) or errors
+	const headers = {
+		'Access-Control-Allow-Origin': '*',
+		'Content-Type': response.headers.get('Content-Type') || 'application/json',
+	};
+	
+	// Forward the Range header if present (shows bytes received)
+	const range = response.headers.get('Range');
+	if (range) {
+		headers['Range'] = range;
+	}
+	
+	return new Response(response.body, {
+		status: response.status,
+		headers,
+	});
 }
 
 async function handleMetadata(id, drive, config, origin) {
@@ -708,7 +769,8 @@ async function withDefaults(env = {}) {
 				key === 'API_TOKENS' ||
 				key === 'CDN_BASE_URL' ||
 				key.startsWith('DASHBOARD_') ||
-				key === 'DRIVE_PROFILES'
+				key === 'DRIVE_PROFILES' ||
+				key === 'DRIVE_TOTAL_LIMIT_GB'
 			) {
 				config[key] = env[key];
 			}
@@ -738,9 +800,13 @@ function buildDashboardHTML(config, origin) {
 	const repo = getRepoMeta();
 	const driveProfiles = parseDriveProfiles(config);
 	
-	// Inject inline CSS
+	// 1. Inject inline CSS
 	const inlineCss = asText(dashboardCss);
-	const cssInjected = template.replace('/* CSS will be injected here by worker */', inlineCss);
+	const cssInjected = asText(dashboardHtml).replace('/* CSS will be injected here by worker */', inlineCss);
+	
+	// 2. Inject inline JS
+	const inlineJs = asText(dashboardJs);
+	const jsInjected = cssInjected.replace('/* JS will be injected here by worker */', inlineJs);
 	
 	const bootstrapData = `<script>window.__GDRIVE_CDN_CONFIG__=${JSON.stringify({
 		cdnBaseUrl: config.CDN_BASE_URL || origin,
@@ -751,7 +817,7 @@ function buildDashboardHTML(config, origin) {
 		driveProfiles,
 	})};</script>`;
 	
-	const populated = applyAssetPlaceholders(cssInjected, assets);
+	const populated = applyAssetPlaceholders(jsInjected, assets);
 	if (populated.includes('</head>')) {
 		return populated.replace('</head>', `${bootstrapData}</head>`);
 	}
@@ -835,6 +901,7 @@ async function getFileCountsSnapshot(env, drive) {
 	const counts = await drive.countFiles();
 	const payload = {
 		totalFiles: counts.totalFiles,
+		totalSize: counts.totalSize,
 		folderCount: counts.folderCount,
 		complete: counts.complete,
 		timestamp: now,
@@ -846,22 +913,28 @@ async function getFileCountsSnapshot(env, drive) {
 	return payload;
 }
 
-function formatStorageQuota(storageResponse) {
+function formatStorageQuota(storageResponse, counts, config = {}) {
 	const quota = storageResponse?.storageQuota;
+	const totalSizeCalculated = counts?.totalSize || 0;
+
 	if (!quota) {
+		const totalBytesFromConfig = Number(config.DRIVE_TOTAL_LIMIT_GB || 0) * 1024 * 1024 * 1024;
 		return {
-			totalBytes: 0,
-			usedBytes: 0,
+			totalBytes: totalBytesFromConfig,
+			usedBytes: totalSizeCalculated,
 			trashBytes: 0,
-			totalDisplay: '0 B',
-			usedDisplay: '0 B',
+			totalDisplay: totalBytesFromConfig ? formatBytes(totalBytesFromConfig) : 'Unlimited',
+			usedDisplay: formatBytes(totalSizeCalculated),
 			trashDisplay: '0 B',
-			percentUsed: 0,
+			percentUsed: totalBytesFromConfig ? Math.min(100, (totalSizeCalculated / totalBytesFromConfig) * 100) : 0,
 		};
 	}
+
 	const totalBytes = Number(quota.limit) || 0;
-	const usedBytes = Number(quota.usageInDrive || quota.usage || 0);
+	// Use the larger of the two: account usage or calculated folder size
+	const usedBytes = Math.max(Number(quota.usageInDrive || quota.usage || 0), totalSizeCalculated);
 	const trashBytes = Number(quota.usageInDriveTrash || 0);
+
 	return {
 		totalBytes,
 		usedBytes,

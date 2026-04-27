@@ -348,12 +348,26 @@ export class DriveClient {
   }
 
   async getDriveStorageInfo() {
-    const params = new URLSearchParams({
-      fields: 'storageQuota(limit,usage,usageInDrive,usageInDriveTrash)',
-      supportsAllDrives: 'true',
-      includeItemsFromAllDrives: 'true',
-    });
-    return this.fetchJson(`https://www.googleapis.com/drive/v3/about?${params.toString()}`);
+    try {
+      const accessToken = await this.getAccessToken({ forceOAuth: true });
+      const response = await fetch('https://www.googleapis.com/drive/v3/about?fields=storageQuota(limit,usage,usageInDrive,usageInDriveTrash)&supportsAllDrives=true&includeItemsFromAllDrives=true', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json'
+        }
+      });
+      
+      if (response.ok) {
+        return await response.json();
+      } else {
+        const errorText = await response.text();
+        console.error(`Google API storage quota error: ${response.status} - ${errorText}`);
+        return null;
+      }
+    } catch (err) {
+      console.error('OAuth auth error for storage info:', err);
+      return null;
+    }
   }
 
   async countFiles(options = {}) {
@@ -364,7 +378,7 @@ export class DriveClient {
       queryParts.push(parentsClause);
     }
     const params = new URLSearchParams({
-      fields: 'nextPageToken,files(mimeType)',
+      fields: 'nextPageToken,files(mimeType,size)',
       pageSize: String(COUNT_PAGE_SIZE),
       supportsAllDrives: 'true',
       includeItemsFromAllDrives: 'true',
@@ -374,6 +388,7 @@ export class DriveClient {
 
     let nextPageToken;
     let totalFiles = 0;
+    let totalSize = 0;
     let folderCount = 0;
     let page = 0;
     do {
@@ -385,7 +400,15 @@ export class DriveClient {
       const response = await this.fetchJson(`https://www.googleapis.com/drive/v3/files?${params.toString()}`);
       const files = response.files || [];
       totalFiles += files.length;
-      folderCount += files.filter((item) => item.mimeType === 'application/vnd.google-apps.folder').length;
+      
+      for (const file of files) {
+        if (file.mimeType === 'application/vnd.google-apps.folder') {
+          folderCount += 1;
+        } else if (file.size) {
+          totalSize += Number(file.size);
+        }
+      }
+      
       nextPageToken = response.nextPageToken;
       page += 1;
       if (!nextPageToken) {
@@ -395,6 +418,7 @@ export class DriveClient {
 
     return {
       totalFiles,
+      totalSize,
       folderCount,
       complete: !nextPageToken,
     };
@@ -421,14 +445,15 @@ export class DriveClient {
     return fetch(url, { ...init, headers });
   }
 
-  async getAccessToken() {
+  async getAccessToken(options = {}) {
+    const { forceOAuth = false } = options;
     // Ensure service accounts are loaded
     await this.loadServiceAccounts();
     
     const serviceAccount = this.getCurrentServiceAccount();
     
-    // Use service account if available, otherwise fall back to OAuth refresh token
-    if (serviceAccount) {
+    // Use service account if available (unless forced to use OAuth), otherwise fall back to OAuth refresh token
+    if (serviceAccount && !forceOAuth) {
       const accountKey = serviceAccount.client_email || 'default';
       const cached = this.cachedTokens.get(accountKey);
       

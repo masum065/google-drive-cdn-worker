@@ -1,4 +1,4 @@
-﻿/* ============================================
+/* ============================================
    PREMIUM CDN DASHBOARD - ULTRA MODERN DESIGN
    ============================================ */
 
@@ -739,4 +739,122 @@ html {
 ::selection {
     background: rgba(102, 126, 234, 0.3);
     color: white;
+}
+/* Drive Card Premium Styling - Compact Version */
+.drive-card {
+    background: #1a1a24;
+    border: 1px solid #2d2d3d;
+    border-radius: 0; /* Remove border radius */
+    padding: var(--space-md); /* Reduced padding from XL to MD */
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+}
+
+.drive-card--primary {
+    border-color: rgba(102, 126, 234, 0.3);
+}
+
+.drive-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(102, 126, 234, 0.5);
+}
+
+.drive-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: var(--space-md); /* Reduced margin */
+}
+
+.drive-card-header h4 {
+    font-size: 1.1rem; /* Smaller font */
+    font-weight: 700;
+    color: white;
+    margin-bottom: 2px;
+}
+
+.drive-card-header p {
+    font-size: 0.8rem; /* Smaller font */
+    color: var(--text-secondary);
+}
+
+.drive-badge {
+    padding: 2px 10px; /* Smaller badge */
+    border-radius: 0; /* Remove border radius */
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.drive-badge.active {
+    background: rgba(102, 126, 234, 0.2);
+    color: #667eea;
+    border: 1px solid rgba(102, 126, 234, 0.3);
+}
+
+.drive-usage {
+    margin-bottom: var(--space-md); /* Reduced margin */
+}
+
+.usage-bar {
+    height: 6px; /* Thinner progress bar */
+    background: #0f0f18;
+    border-radius: 0; /* Remove border radius */
+    overflow: hidden;
+    margin-bottom: 8px;
+}
+
+.usage-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    border-radius: 0;
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.usage-text {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem; /* Smaller font */
+    color: var(--text-secondary);
+}
+
+.usage-text strong {
+    color: white;
+}
+
+.drive-meta {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-sm);
+    padding-top: var(--space-sm);
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.meta-stat {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+}
+
+.meta-stat .label {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.meta-stat .value {
+    font-size: 1.1rem; /* Smaller value text */
+    font-weight: 700;
+    color: white;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .drive-meta {
+        grid-template-columns: repeat(3, 1fr); /* Keep 3 columns on mobile if possible for compact look */
+        gap: 8px;
+    }
 }
